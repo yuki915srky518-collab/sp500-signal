@@ -239,7 +239,7 @@ const DEFAULTS = {
   ma:    { period: 50, buyFull: -5, sellFull: 5 },
   rci:   { short: 10, long: 30, buyStart: -60, buyFull: -90, sellStart: 60, sellFull: 95 },
   skew:  { buyStart: 130, buyFull: 120, sellStart: 150, sellFull: 160 },
-  judge: { strongBuy: 12, buy: 7, sell: -8.5, strongSell: -11 }
+  judge: { strongBuy: 11.5, buy: 6, sell: -8, strongSell: -10.5 }
 };
 const SCHEMA = [
   { key: "fg", title: "Fear & Greed", fields: [
@@ -258,7 +258,7 @@ const SCHEMA = [
     ["strongBuy", "強い買い(以上)"], ["buy", "買い(以上)"],
     ["sell", "売り(以下)"], ["strongSell", "強い売り(以下)"]] }
 ];
-const STORE_KEY = "sp500-signal-settings-v1";
+const STORE_KEY = "sp500-signal-settings-v2";
 
 function loadSettings() {
   const s = JSON.parse(JSON.stringify(DEFAULTS));
