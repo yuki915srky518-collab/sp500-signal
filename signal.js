@@ -123,7 +123,68 @@
 
   const fgLabel = v => v == null ? "" : v < 25 ? "極度の恐怖" : v < 45 ? "恐怖" : v <= 55 ? "中立" : v <= 75 ? "強欲" : "極度の強欲";
 
-  const api = { MAX_PT, DEFAULTS, compute, judge, fgLabel };
+  // ---------- ウィジェット用コード(例 v1:30,15,70,80|50,-5,5|...) ----------
+  const CODE_ORDER = [
+    ["fg", ["buyStart", "buyFull", "sellStart", "sellFull"]],
+    ["ma", ["period", "buyFull", "sellFull"]],
+    ["rci", ["short", "long", "buyStart", "buyFull", "sellStart", "sellFull"]],
+    ["skew", ["buyStart", "buyFull", "sellStart", "sellFull"]],
+    ["judge", ["strongBuy", "buy", "sell", "strongSell"]]
+  ];
+  function encodeSettings(S) {
+    return "v1:" + CODE_ORDER.map(([g, ks]) => ks.map(k => +S[g][k]).join(",")).join("|");
+  }
+  function decodeSettings(code) {
+    const m = String(code || "").trim().match(/^v1:(.+)$/);
+    if (!m) return null;
+    const parts = m[1].split("|");
+    if (parts.length !== CODE_ORDER.length) return null;
+    const S = {};
+    for (let i = 0; i < CODE_ORDER.length; i++) {
+      const [g, ks] = CODE_ORDER[i];
+      const vals = parts[i].split(",").map(Number);
+      if (vals.length !== ks.length || vals.some(v => !isFinite(v))) return null;
+      S[g] = {};
+      ks.forEach((k, j) => { S[g][k] = vals[j]; });
+    }
+    return S;
+  }
+  const isDefault = S => encodeSettings(S) === encodeSettings(DEFAULTS);
+
+  // ---------- ウィジェット用の要約 ----------
+  function summarize(D, S) {
+    const rows = compute(D, S);
+    const last = rows[rows.length - 1];
+    const prev = rows[rows.length - 2];
+    const r2 = v => v == null ? null : Math.round(v * 100) / 100;
+    const signed = (v, d) => v == null ? "—" : (v > 0 ? "+" : "") + v.toFixed(d);
+    const state = p => !p.ok ? "none" : p.buy > 0 ? "buy" : p.sell > 0 ? "sell" : "neutral";
+    const indicators = [
+      { key: "fg", name: "F&G", value: last.fg, text: last.fg == null ? "—" : last.fg.toFixed(1) },
+      { key: "ma", name: `${S.ma.period}日線`, value: last.dev, text: signed(last.dev, 1) + (last.dev == null ? "" : "%") },
+      { key: "rci", name: "RCI", value: last.rs, text: signed(last.rs, 1) },
+      { key: "skew", name: "SKEW", value: last.skew, text: last.skew == null ? "—" : last.skew.toFixed(1) }
+    ].map(x => {
+      const p = last.parts[x.key];
+      return Object.assign({}, x, { value: r2(x.value), buy: r2(p.buy), sell: r2(p.sell), points: r2(p.buy - p.sell), state: state(p) });
+    });
+    return {
+      date: last.date,
+      fetchedAt: D.fetchedAt,
+      score: r2(last.score),
+      buy: r2(last.buy),
+      sell: r2(last.sell),
+      judgment: judge(last.score, S.judge),
+      prev: prev ? { date: prev.date, score: r2(prev.score), label: judge(prev.score, S.judge).label } : null,
+      indicators,
+      thresholds: S.judge,
+      custom: !isDefault(S),
+      fgStale: !!D.fgError,
+      generatedAt: new Date().toISOString()
+    };
+  }
+
+  const api = { MAX_PT, DEFAULTS, compute, judge, fgLabel, encodeSettings, decodeSettings, isDefault, summarize };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.Signal = api;
 })(typeof window !== "undefined" ? window : this);

@@ -180,6 +180,9 @@ details.panel > summary { cursor: pointer; font-weight: 700; font-size: 16px; }
 button { font: inherit; font-size: 14px; padding: 6px 16px; border-radius: 8px; border: 1px solid var(--axis); background: var(--page); color: var(--ink); cursor: pointer; }
 button.primary { background: var(--buy); border-color: var(--buy); color: #fff; }
 .saved { color: var(--ink-2); font-size: 13px; }
+button.green { background: #0f7f57; border-color: #0f7f57; color: #fff; }
+.widget-code { margin-top: 16px; padding-top: 6px; border-top: 1px solid var(--grid); }
+.widget-code .steps { margin: 8px 0 0; padding-left: 20px; font-size: 13px; color: var(--ink-2); }
 footer { color: var(--muted); font-size: 12px; margin-top: 24px; }
 
 @media (max-width: 640px) {
@@ -520,15 +523,36 @@ function renderSettings(S) {
     SCHEMA.map(g => `<fieldset><legend>${g.title}</legend>` +
       g.fields.map(([k, lab]) => `<label>${lab}<input type="number" step="any" data-g="${g.key}" data-k="${k}" value="${S[g.key][k]}"></label>`).join("") +
       `</fieldset>`).join("") +
-    `</div><div class="btns"><button class="primary" id="btnSave">保存して再計算</button><button id="btnReset">初期値に戻す</button><span class="saved" id="savedMsg"></span></div>`;
-  $("btnSave").onclick = () => {
+    `</div><div class="btns"><button class="primary" id="btnSave">保存して再計算</button><button id="btnReset">初期値に戻す</button><span class="saved" id="savedMsg"></span></div>
+    <div class="widget-code">
+      <div class="btns"><button class="green" id="btnCode">📋 ウィジェット用コードをコピー</button><span class="saved" id="codeMsg"></span></div>
+      <ol class="steps">
+        <li>ホーム画面のウィジェットを長押し →「ウィジェットを編集」</li>
+        <li>「Parameter」欄に貼り付け(初期値に戻すときは空欄にする)</li>
+      </ol>
+    </div>`;
+  const readInputs = () => {
     const ns = JSON.parse(JSON.stringify(S));
     let bad = false;
     document.querySelectorAll("#settings input").forEach(inp => {
       const v = parseFloat(inp.value);
       if (!isFinite(v)) bad = true; else ns[inp.dataset.g][inp.dataset.k] = v;
     });
-    if (bad) { $("savedMsg").textContent = "数値でない項目があります"; return; }
+    return bad ? null : ns;
+  };
+  $("btnCode").onclick = async () => {
+    const ns = readInputs();
+    if (!ns) { $("codeMsg").textContent = "数値でない項目があります"; return; }
+    const code = Signal.encodeSettings(ns);
+    if (await copyText(code)) {
+      $("codeMsg").textContent = Signal.isDefault(ns) ? "✓ コピーしました(初期値と同じ基準です)" : "✓ コピーしました";
+    } else {
+      window.prompt("このコードをコピーしてください", code);
+    }
+  };
+  $("btnSave").onclick = () => {
+    const ns = readInputs();
+    if (!ns) { $("savedMsg").textContent = "数値でない項目があります"; return; }
     const ok = saveSettings(ns);
     renderAll(ns);
     $("savedMsg").textContent = ok ? "保存しました" : "再計算しました(保存はできませんでした)";
@@ -538,6 +562,16 @@ function renderSettings(S) {
     renderAll(loadSettings());
     $("savedMsg").textContent = "初期値に戻しました";
   };
+}
+
+async function copyText(t) {
+  try { await navigator.clipboard.writeText(t); return true; } catch (e) {}
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = t; ta.setAttribute("readonly", ""); ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, t.length);
+    const ok = document.execCommand("copy"); ta.remove(); return ok;
+  } catch (e) { return false; }
 }
 
 let current = null;

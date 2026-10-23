@@ -16,14 +16,37 @@ const judgeColor = cls => ({ sb: C.buyStrong, b: C.buy, s: C.sell, ss: C.sellStr
 const stateColor = st => st === "buy" ? C.buy : st === "sell" ? C.sell : C.muted;
 const signed = (v, d) => v == null ? "—" : (v > 0 ? "+" : v < 0 ? "−" : "±") + Math.abs(v).toFixed(d);
 
-// 取得(失敗したら前回の保存分を使う)
-const fm = FileManager.local();
-const cachePath = fm.joinPath(fm.documentsDirectory(), "sp500-signal-summary.json");
-let data = null, stale = false;
-try {
+// ウィジェットの Parameter にコード(v1:...)があれば、その基準でiPhone上で計算する
+const param = String(args.widgetParameter || "").trim();
+let badCode = false;
+
+async function loadText(file) {
+  const req = new Request(BASE + file + "?t=" + Date.now());
+  req.timeoutInterval = 20;
+  return await req.loadString();
+}
+async function fetchSummary() {
+  if (param) {
+    const env = {};
+    new Function("window", "module", await loadText("signal.js"))(env, undefined);
+    const S = env.Signal.decodeSettings(param);
+    if (S) {
+      new Function("window", "module", await loadText("data.js"))(env, undefined);
+      return env.Signal.summarize(env.MARKET_DATA, S);
+    }
+    badCode = true;
+  }
   const req = new Request(BASE + "summary.json?t=" + Date.now());
   req.timeoutInterval = 20;
-  data = await req.loadJSON();
+  return await req.loadJSON();
+}
+
+// 取得(失敗したら前回の保存分を使う)
+const fm = FileManager.local();
+const cachePath = fm.joinPath(fm.documentsDirectory(), param ? "sp500-signal-custom.json" : "sp500-signal-summary.json");
+let data = null, stale = false;
+try {
+  data = await fetchSummary();
   if (!data || data.score == null) throw new Error("bad data");
   fm.writeString(cachePath, JSON.stringify(data));
 } catch (e) {
@@ -59,6 +82,8 @@ function mainBlock(stack, big) {
   addText(sc, "点", 12, C.sub, false);
   stack.addSpacer();
   if (data.prev) addText(stack, `前日 ${signed(data.prev.score, 1)}(${data.prev.label})`, 10, C.muted, false);
+  if (badCode) addText(stack, "※コード不正(初期値で表示)", 9, C.sell, false);
+  else if (data.custom) addText(stack, "カスタム基準", 9, C.buyStrong, true);
   if (stale || data.fgStale) addText(stack, stale ? "※前回取得分" : "※F&Gは前回値", 9, C.sell, false);
 }
 
